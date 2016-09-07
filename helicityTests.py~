@@ -24,59 +24,69 @@ def magnitude(vari):
     return np.sqrt(length_vari)
 
 
-def main(a2=2.53, end_time=6, part=1, sep=1.1, dt=0.01, a1=0.861, recVar=False):
+def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, initDeviation=(0, 0, )):
+    currentDeviation = [list(initDeviation[:])]
+    derivativeDeviation = [[0] * len(initDeviation)]
     pi = np.pi
     dir_path = "./Variational Lyapunov/"
     ensure_dir(dir_path)
     t0 = tm.perf_counter()
-    sim = rb.Simulation()
-    sim.units = ('Yr', 'AU', 'Msun')
-    sim.integrator = 'ias15'
-    sim.dt = dt
-    sim.add(m=1.31, x=0, y=0, z=0)
-    sim.add(primary=sim.particles[0], a=a1, m=14.57/1047.56, e=0.239, omega=(290*pi)/180, inc=(16.7*pi)/180, M=154.8*pi/180, Omega=(295.5*pi)/180)
-    sim.add(primary=sim.particles[0], a=a2, m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
-    if not any(fle.startswith("SemiSys_Lyap_a_{:.5e}_P_{:.0f}_{:.1e}_Yrs_dt".format(a2, part, 10**end_time)) for fle in os.listdir(dir_path)): 
-        print("All systems go for dt: {} and a2: {}!".format(dt, a2))
-        sim.move_to_com()
-        m = 0
-        t_x = np.linspace(0, 10**end_time, 10)
-        print("hot potato")
-        for t in t_x:
-            sim.integrate(t)
-            try:
-                sim_mag.append(magnitude(sim))
-            except OverflowError:
-                break
-            else:
-                if m%100 == 0:
-                    print("t: {:.2e} Completed - Sim_mag: {:.1e}".format(t, magnitude(sim)))
-                m += 1
-        print("Cold potato")
-        with open(dir_path + "SemiSys_Lyap_a_{:.5e}_P_{:.0f}_{:.1e}_Yrs_dt_{:.2e}.txt".format(a2, part, 10**end_time, sim.dt), 'w') as fle:
-            toSave = (t_x, sim_mag, e1, e2, a_1, a_2)
-            for i in zip(*toSave)
-                fle.write(str.join(i, "; ") + '\n'))
-        tcomp = tm.perf_counter() - t0
-        print("Completed in {:.2f} minutes".format(tcomp/60) + " for system a2: {}!".format(a2))
-    else:
-        print("File already exists, passing...")
+    sim1 = rb.Simulation()
+    sim1.units = ('Yr', 'AU', 'Msun')
+    sim1.integrator = 'ias15'
+    sim1.dt = dt
+    sim1.add(m=1.31, x=0, y=0, z=0)
+    sim1.add(primary=sim1.particles[0], a=a1, m=14.57/1047.56, e=0.239, omega=(290*pi)/180, inc=(16.7*pi)/180, M=154.8*pi/180, Omega=(295.5*pi)/180)
+    sim1.add(primary=sim1.particles[0], a=a2, m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
+    sim1.move_to_com()
+    sim2 = rb.Simulation()
+    sim2.units = ('Yr', 'AU', 'Msun')
+    sim2.integrator = 'ias15'
+    sim2.dt = dt
+    sim2.add(m=1.31, x=0, y=0, z=0)
+    sim2.add(primary=sim2.particles[0], a=a1 + initDeviation[0], m=14.57/1047.56, e=0.239 + initDeviation[2], omega=((290 + initDeviation[4])*pi)/180, inc=((16.7 +  + initDeviation[6])*pi)/180, M=(154.8 + initDeviation[8])*pi/180, Omega=((295.5 + initDeviation[10])*pi)/180)
+    sim2.add(primary=sim2.particles[0], a=a2 + initDeviation[1], m=10.19/1047.56, e=0.274 + initDeviation[3], omega=((240.8  + initDeviation[5])*pi)/180, inc=((13.5 +  + initDeviation[7])*pi)/180, M=(82.5 + initDeviation[9])*pi/180, Omega=((115 + initDeviation[11])*pi)/180)
+    sim2.move_to_com()
+    print("All systems go for dt: {} and a2: {}!".format(dt, a2))
+    m = 0
+    t_x = np.linspace(0, 10**2, 100)
+    print("hot potato")
+    tPrev = 0
+    phaseSpaceParameters = ['a', 'e', 'omega', 'inc', 'M', 'Omega']
+    for t in t_x:
+        sim1.integrate(t)
+        sim2.integrate(t)
+        try:
+            if tPrev > 0:
+                calculatedOrbitsSim1 = sim1.calculate_orbits()
+                calculatedOrbitsSim2 = sim2.calculate_orbits()
+                currentDeviation.append([])
+                derivativeDeviation.append([])
+                for i in phaseSpaceParameters:
+                    for j in range(2):
+                        currentDeviation[-1].append(eval("calculatedOrbitsSim2[{}].{} - calculatedOrbitsSim1[{}].{}".format(j, i, j, i)))
+                        derivativeDeviation[-1].append(currentDeviation[-1][-1] / (t - tPrev))
+        except OverflowError:
+            break
+        else:
+            if m%100 == 0:
+                print("t: {:.2e} Completed - Sim_mag: {:.1e}".format(t, magnitude(sim1)))
+            tPrev = t
+            m += 1
+    print("Cold potato")
+    with open(dir_path + "HelicityTest - {}.txt".format(*initDeviation), 'w') as fle:
+        toSave = (t_x, derivativeDeviation, currentDeviation)
+        for i in zip(*toSave):
+            baseLine = '; '
+            line = ["{}".format(j) for j in i]
+            fle.write(baseLine.join(line) + '\n')
+    tcomp = tm.perf_counter() - t0
+    print("Completed in {:.2f} minutes".format(tcomp/60) + " for system a2: {}!".format(a2))
 
 def worker(arguments):
     main(**arguments)
 
 
 if __name__ == "__main__":
-    pool = mp.Pool(processes=1)
-    argu = []
-    try:    
-        dir_path = "./Variational Lyapunov/"
-        argu.append({'a2': 2.53, 'deviation': (1,1,)})
-        pool.map_async(worker, argu)
-        pool.close()
-    except:
-        pool.terminate()
-        quit()
-    finally:
-        pool.join()
+    worker({'a2': 2.53, 'initDeviation': tuple([1] + [0] * 11), 'endTime': 2})
 
