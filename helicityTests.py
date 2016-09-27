@@ -61,12 +61,8 @@ def magnitude(vari):
     return np.sqrt(length_vari)
 
 
-def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, initDeviationSimOne=(0, 0, ), initDeviationSimTwo=(0, 0, )):
+def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, avar1 = [0, 0], avar2 = [0, 0]):
     global sim1, sim2, sim3, currentDeviation1, currentDeviation2, derivativeDeviation1, derivativeDeviation2, helicityAngles1, twistAngles1
-    currentDeviation1 = [list(initDeviationSimOne[:])]
-    currentDeviation2 = [list(initDeviationSimTwo[:])]
-    derivativeDeviation1 = [[0] * len(initDeviationSimOne)]
-    derivativeDeviation2 = [[0] * len(initDeviationSimTwo)]
     helicityAngles1 = [[0]]
     twistAngles1 = [[0]]
     pi = np.pi
@@ -78,20 +74,19 @@ def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, i
     sim1.integrator = 'ias15'
     sim1.dt = dt
     sim1.add(m=1.31, x=0, y=0, z=0)
-    sim1.add(primary=sim1.particles[0], a=a1, m=14.57/1047.56, e=0.239, omega=(290*pi)/180, inc=(16.7*pi)/180, M=154.8*pi/180, Omega=(295.5*pi)/180)
-    sim1.add(primary=sim1.particles[0], a=a2, m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
+    sim1.add(primary=sim1.particles[0], a=a1 + avar1[0], m=14.57/1047.56, e=0.239, omega=(290*pi)/180, inc=(16.7*pi)/180, M=154.8*pi/180, Omega=(295.5*pi)/180)
+    sim1.add(primary=sim1.particles[0], a=a2 + avar1[1], m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
     sim1.move_to_com()
     sim2 = rb.Simulation()
     sim2.units = ('Yr', 'AU', 'Msun')
     sim2.integrator = 'ias15'
     sim2.dt = dt
     sim2.add(m=1.31, x=0, y=0, z=0)
-    sim2.add(primary=sim1.particles[0], a=a1, m=14.57/1047.56, e=0.239, omega=(290*pi)/180, inc=(16.7*pi)/180, M=154.8*pi/180, Omega=(295.5*pi)/180)
-    sim2.add(primary=sim1.particles[0], a=a2, m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
+    sim2.add(primary=sim1.particles[0], a=a1 + avar2[0], m=14.57/1047.56, e=0.239, omega=(290*pi)/180, inc=(16.7*pi)/180, M=154.8*pi/180, Omega=(295.5*pi)/180)
+    sim2.add(primary=sim1.particles[0], a=a2 + avar2[1], m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
     sim2.move_to_com()
     for i in range(1, len(sim2.particles)):
-        for j, k in enumerate(altphaseSpaceParameters):
-            setattr(sim2.particles[i], k, getattr(sim2.particles[i], k) + initDeviationSimOne[j * i])
+        currentDeviation1.append(getattr(sim2.particles[i], k) for k in altphaseSpaceParameters)
     sim3 = rb.Simulation()
     sim3.units = ('Yr', 'AU', 'Msun')
     sim3.integrator = 'ias15'
@@ -101,8 +96,9 @@ def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, i
     sim3.add(primary=sim1.particles[0], a=a2, m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
     sim3.move_to_com()
     for i in range(1, len(sim3.particles)):
-        for j, k in enumerate(altphaseSpaceParameters):
-            setattr(sim3.particles[i], k, getattr(sim3.particles[i], k) + initDeviationSimTwo[j * i])
+        currentDeviation2.append(getattr(sim2.particles[i], k) for k in altphaseSpaceParameters)
+    derivativeDeviation1 = [[0] * len(currentDeviation1)]
+    derivativeDeviation2 = [[0] * len(currentDeviation2)]
     print("All systems go for dt: {} and a2: {}!".format(dt, a2))
     m = 0
     t_x = np.linspace(0, 10**endTime, 100000)
@@ -138,5 +134,5 @@ def worker(arguments):
 
 
 if __name__ == "__main__":
-    worker({'a2': 2.53, 'initDeviationSimOne': tuple([0.0001] + [0] * 11), 'initDeviationSimTwo': tuple([0] + [0.0001] + [0] * 10), 'endTime': 6})
+    worker({'a2': 2.53, 'avar1': tuple([0.0001] + [0] * 11), 'avar2': tuple([0] + [0.0001] + [0] * 10), 'endTime': 6})
 
