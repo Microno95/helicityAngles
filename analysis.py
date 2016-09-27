@@ -14,20 +14,48 @@ def ensureDir(dirPath):
             
 def analyseSaveData(dataPath, savePath="./"):
     pdData = pd.read_csv(dataPath, sep=";", names=['Time', 'Current Deviation A', 'Current Deviation B', 'Derivative Deviation A', 'Derivative Deviation B',
-                                                   'Helicity Angles A', 'Helicity Angles B', 'Twist Angles A', 'Twist Angles B']).replace('nan', '0', regex=True).astype(str)
-    for i in range(len(pdData['Helicity Angles A']) - 5, len(pdData['Helicity Angles A'])):
-        # valCount = scstats.binned_statistic(eval(pdData['Current Deviation'][i]), eval(pdData['Current Deviation'][i]), statistic='count', bins=12, range=(-5, 5))
-        print('Starting work on Frame {}'.format(i))
-        fig1 = plt.figure(figsize=(10,10), tight_layout=True)
-        ax1 = fig1.add_subplot(121)
-        ax = fig1.add_subplot(122)
-        ax.hist([j for j in eval(pdData['Helicity Angles A'][i]) if j != 0], bins=250, normed=True, label="Positive initial Deviation")
-        ax1.hist([j for j in eval(pdData['Helicity Angles B'][i]) if j != 0], bins=250, normed=True, label="Double initial Deviation")
-        ax.legend()
-        plt.tight_layout()
-        fig1.savefig(savePath + 'Frame_{}.png'.format(i), dpi=150)
-        plt.close(fig1)
-        del fig1
+                                                   'Helicity Angles', 'Twist Angles']).replace('nan', '0', regex=True).astype(str)
+    # valCount = scstats.binned_statistic(eval(pdData['Current Deviation'][i]), eval(pdData['Current Deviation'][i]), statistic='count', bins=12, range=(-5, 5))
+    i = 0
+    print('Starting work on Frame {}'.format(i))
+    relevantDataHelicity = [eval(i)[0] for i in pdData['Helicity Angles']]
+    relevantDataTwist = [eval(i)[0] for i in pdData['Twist Angles']]
+    time = [float(i) for i in pdData['Time']]
+    fig1 = plt.figure(figsize=(20,20), tight_layout=True)
+    ax1 = fig1.add_subplot(221)
+    ax2 = fig1.add_subplot(223)
+    ax3 = fig1.add_subplot(222)
+    ax4 = fig1.add_subplot(224)
+    n, bins, patches = ax1.hist(relevantDataHelicity, bins=200, histtype='step', normed=True, label="Helicity Spectra")
+    mu = numpy.mean(relevantDataHelicity)
+    sigma = numpy.std(relevantDataHelicity)
+    y = scstats.norm.pdf(bins, mu, sigma)
+    l = ax1.plot(bins, y, 'k--', linewidth=1.5, label="PDF of Helicity Spectra")
+    n, bins, patches = ax2.hist(relevantDataTwist, bins=200, histtype='step', normed=True, label="Twist Spectra")
+    mu = numpy.mean(relevantDataTwist)
+    sigma = numpy.std(relevantDataTwist)
+    y = scstats.norm.pdf(bins, mu, sigma)
+    l = ax2.plot(bins, y, 'k--', linewidth=1.5, label="PDF of Twist Spectra")
+    ax3.plot(time, relevantDataHelicity, label="Helicity Angle")
+    ax4.plot(time, relevantDataTwist, label="Twist Angle")
+    ax3.set_xscale('log')
+    ax4.set_xscale('log')
+    ax3.set_yscale('log')
+    ax4.set_yscale('log')
+    ax1.set_xlabel("Helicity Angle")
+    ax2.set_xlabel("Twist Angle")
+    ax3.set_xlabel("Time")
+    ax4.set_xlabel("Time")
+    ax3.set_ylabel("Helicity Angle")
+    ax4.set_ylabel("Twist Angle")
+    ax1.legend()
+    ax2.legend()
+    ax3.legend()
+    ax4.legend()
+    plt.tight_layout()
+    fig1.savefig(savePath + 'Frame_{}.png'.format(i), dpi=150)
+    plt.close(fig1)
+    del fig1
     
     
 if __name__ == "__main__":

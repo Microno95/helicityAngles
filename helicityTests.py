@@ -8,7 +8,7 @@ import rebound as rb
 import sys as sys
 import multiprocessing as mp
 from numpy import arccos as acos
-from math import atan2
+from math import atan2, fsum, sqrt
 
 np.seterr(all='raise')
 phaseSpaceParameters = ['a', 'e', 'omega', 'inc', 'M', 'Omega']
@@ -23,44 +23,35 @@ def ensure_dir(path): # Ensures that the path to a directory exists, and creates
             raise
 
 
-def calcHelicity(sim1, sim2, currentDeviation, derivativeDeviation, helicityAngles, twistAngles):
+def calcHelicity(sim1, sim2, currentDeviation, derivativeDeviation):
     calculatedOrbitsSim1 = sim1.particles
     calculatedOrbitsSim2 = sim2.particles
     currentDeviation.append([])
     derivativeDeviation.append([])
-    helicityAngles.append([])
-    twistAngles.append([])
     for i in altphaseSpaceParameters:
         for j in range(1, 3):
             currentDeviation[-1].append(eval("calculatedOrbitsSim2[{}].{} - calculatedOrbitsSim1[{}].{}".format(j, i, j, i)))
-            derivativeDeviation[-1].append(currentDeviation[-1][-1] / ((sim1.dt + sim2.dt) / 2.0))
-    for i in range(len(currentDeviation[-1])):
-        for j in range(len(currentDeviation[-1])):
-            if j != i:
-                helicityAngles[-1].append(atan2(currentDeviation[-1][i], currentDeviation[-1][j]))
-                derivDevIJ = [derivativeDeviation[-1][i], derivativeDeviation[-1][j]]
-                devIJ = [currentDeviation[-1][i], currentDeviation[-1][j]]
-                if norm(devIJ) != 0.0:
-                    devIJ = [k / norm(devIJ) for k in devIJ]
-                else:
-                    devIJ = [0, 0]
-                if norm(derivDevIJ) != 0.0:
-                    derivDevIJ = [k / norm(derivDevIJ) for k in derivDevIJ]
-                else:
-                    derivDevIJ = [0, 0]
-                dotProdij = np.sqrt(np.dot(derivDevIJ, devIJ))
-                try:
-                    angProdij = acos(dotProdij) / ((sim1.dt + sim2.dt) / 2.0)
-                except FloatingPointError:
-                    angProdij = 0.0
-                twistAngles[-1].append(angProdij)
+            derivativeDeviation[-1].append((currentDeviation[-1][-1] - currentDeviation[-2][-1]) / ((sim1.dt + sim2.dt) / 2.0))
 
 
-def helicityWrapper(reb_sim1, reb_sim2, reb_sim3, deviation1, deviation2, derivDeviation1, derivDeviation2, helicity1, helicity2, twist1, twist2):
+def helicityWrapper(reb_sim1, reb_sim2, reb_sim3, deviation1, deviation2, derivDeviation1, derivDeviation2, helicity1, twist1):
     tSave.append((reb_sim1.t + reb_sim2.t + reb_sim3.t) / 3.0)
-    calcHelicity(reb_sim1, reb_sim2, deviation1, derivDeviation1, helicity1, twist1)
-    calcHelicity(reb_sim1, reb_sim3, deviation2, derivDeviation2, helicity2, twist2)
+    calcHelicity(reb_sim1, reb_sim2, deviation1, derivDeviation1)
+    calcHelicity(reb_sim1, reb_sim3, deviation2, derivDeviation2)
+    helicity1.append([])
+    twist1.append([])
+    heliMag1 = sqrt(fsum([i**2 for i in deviation1[-1]]))
+    heliMag2 = sqrt(fsum([i**2 for i in deviation2[-1]]))
+    twistMag1 = sqrt(fsum([i**2 for i in derivDeviation1[-1]]))
+    twistMag2 = sqrt(fsum([i**2 for i in derivDeviation2[-1]]))
+    dotHelicity = fsum([i * j for i, j in zip(deviation1[-1], deviation2[-1])])
+    dotTwist = fsum([i * j for i, j in zip(derivDeviation1[-1], derivDeviation2[-1])])
+    helicity1[-1].append(acos(dotHelicity / (heliMag1 * heliMag2)))
+    twist1[-1].append(acos(dotTwist / (twistMag1 * twistMag2)) * 3 / (reb_sim1.dt + reb_sim2.dt + reb_sim3.dt))
 
+
+def reboundHelicityWrapper(reb_sim):
+    helicityWrapper(sim1, sim2, sim3, currentDeviation1, currentDeviation2, derivativeDeviation1, derivativeDeviation2, helicityAngles1, twistAngles1)
 
 def magnitude(vari):
     length_vari = 0
@@ -70,15 +61,14 @@ def magnitude(vari):
     return np.sqrt(length_vari)
 
 
-def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, initDeviation=(0, 0, )):
-    currentDeviation1 = [list(initDeviation[:])]
-    currentDeviation2 = [list([-i for i in initDeviation])]
-    derivativeDeviation1 = [[0] * len(initDeviation)]
-    derivativeDeviation2 = [[0] * len(initDeviation)]
-    helicityAngles1 = [[1] + [0] * (len(initDeviation)**2 - len(initDeviation))]
-    helicityAngles2 = [[1] + [0] * (len(initDeviation)**2 - len(initDeviation))]
-    twistAngles1 = [[0] * (len(initDeviation)**2 - len(initDeviation))]
-    twistAngles2 = [[0] * (len(initDeviation)**2 - len(initDeviation))]
+def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, initDeviationSimOne=(0, 0, ), initDeviationSimTwo=(0, 0, )):
+    global sim1, sim2, sim3, currentDeviation1, currentDeviation2, derivativeDeviation1, derivativeDeviation2, helicityAngles1, twistAngles1
+    currentDeviation1 = [list(initDeviationSimOne[:])]
+    currentDeviation2 = [list(initDeviationSimTwo[:])]
+    derivativeDeviation1 = [[0] * len(initDeviationSimOne)]
+    derivativeDeviation2 = [[0] * len(initDeviationSimTwo)]
+    helicityAngles1 = [[0]]
+    twistAngles1 = [[0]]
     pi = np.pi
     dir_path = "./Variational Lyapunov/"
     ensure_dir(dir_path)
@@ -96,20 +86,26 @@ def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, i
     sim2.integrator = 'ias15'
     sim2.dt = dt
     sim2.add(m=1.31, x=0, y=0, z=0)
-    sim2.add(primary=sim2.particles[0], a=a1 + initDeviation[0], m=14.57/1047.56, e=0.239 + initDeviation[2], omega=((290 + initDeviation[4])*pi)/180, inc=((16.7 +  + initDeviation[6])*pi)/180, M=(154.8 + initDeviation[8])*pi/180, Omega=((295.5 + initDeviation[10])*pi)/180)
-    sim2.add(primary=sim2.particles[0], a=a2 + initDeviation[1], m=10.19/1047.56, e=0.274 + initDeviation[3], omega=((240.8  + initDeviation[5])*pi)/180, inc=((13.5 +  + initDeviation[7])*pi)/180, M=(82.5 + initDeviation[9])*pi/180, Omega=((115 + initDeviation[11])*pi)/180)
+    sim2.add(primary=sim1.particles[0], a=a1, m=14.57/1047.56, e=0.239, omega=(290*pi)/180, inc=(16.7*pi)/180, M=154.8*pi/180, Omega=(295.5*pi)/180)
+    sim2.add(primary=sim1.particles[0], a=a2, m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
     sim2.move_to_com()
+    for i in range(1, len(sim2.particles)):
+        for j, k in enumerate(altphaseSpaceParameters):
+            setattr(sim2.particles[i], k, getattr(sim2.particles[i], k) + initDeviationSimOne[j * i])
     sim3 = rb.Simulation()
     sim3.units = ('Yr', 'AU', 'Msun')
     sim3.integrator = 'ias15'
     sim3.dt = dt
     sim3.add(m=1.31, x=0, y=0, z=0)
-    sim3.add(primary=sim2.particles[0], a=a1 + 2 * initDeviation[0], m=14.57/1047.56, e=0.239 + 2 * initDeviation[2], omega=((290 + 2 * initDeviation[4])*pi)/180, inc=((16.7 +  + 2 * initDeviation[6])*pi)/180, M=(154.8 + 2 * initDeviation[8])*pi/180, Omega=((295.5 + 2 * initDeviation[10])*pi)/180)
-    sim3.add(primary=sim2.particles[0], a=a2 + 2 * initDeviation[1], m=10.19/1047.56, e=0.274 + 2 * initDeviation[3], omega=((240.8  + 2 * initDeviation[5])*pi)/180, inc=((13.5 +  + 2 * initDeviation[7])*pi)/180, M=(82.5 + 2 * initDeviation[9])*pi/180, Omega=((115 + 2 * initDeviation[11])*pi)/180)
+    sim3.add(primary=sim1.particles[0], a=a1, m=14.57/1047.56, e=0.239, omega=(290*pi)/180, inc=(16.7*pi)/180, M=154.8*pi/180, Omega=(295.5*pi)/180)
+    sim3.add(primary=sim1.particles[0], a=a2, m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
     sim3.move_to_com()
+    for i in range(1, len(sim3.particles)):
+        for j, k in enumerate(altphaseSpaceParameters):
+            setattr(sim3.particles[i], k, getattr(sim3.particles[i], k) + initDeviationSimTwo[j * i])
     print("All systems go for dt: {} and a2: {}!".format(dt, a2))
     m = 0
-    t_x = np.linspace(0, 10**endTime, 5000)
+    t_x = np.linspace(0, 10**endTime, 100000)
     print("hot potato")
     for t in t_x:
         global tCurrent
@@ -118,18 +114,18 @@ def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, i
             sim1.integrate(t)
             sim2.integrate(t)
             sim3.integrate(t)
-            helicityWrapper(sim1, sim2, sim3, currentDeviation1, currentDeviation2, derivativeDeviation1, derivativeDeviation2, helicityAngles1, helicityAngles2, twistAngles1, twistAngles2)
+            reboundHelicityWrapper(sim1)
         except KeyboardInterrupt:
             print(" ")
             quit()
         else:
             if m%10 == 0:
-                print("t: {:.2e} Completed - Sim_mag: {:.1e};{:.1e};{:.1e}".format(t, magnitude(sim1), magnitude(sim2), magnitude(sim3)), end="\r")
+                print("t: {:.2%} Completed - Sim_mag: {:.1e};{:.1e};{:.1e}".format(t / t_x[-1], magnitude(sim1), magnitude(sim2), magnitude(sim3)), end="\r")
                 sys.stdout.flush()
             m += 1
     print("Cold potato")
-    with open(dir_path + "HelicityTest - {}.txt".format(*initDeviation), 'w') as fle:
-        toSave = (tSave, currentDeviation1, currentDeviation2, derivativeDeviation1, derivativeDeviation2, helicityAngles1, helicityAngles2, twistAngles1, twistAngles2)
+    with open(dir_path + "HelicityTest - {}.txt".format(*initDeviationSimOne), 'w') as fle:
+        toSave = (tSave, currentDeviation1, currentDeviation2, derivativeDeviation1, derivativeDeviation2, helicityAngles1, twistAngles1)
         for i in zip(*toSave):
             baseLine = '; '
             line = ["{}".format(j) for j in i]
@@ -142,5 +138,5 @@ def worker(arguments):
 
 
 if __name__ == "__main__":
-    worker({'a2': 2.53, 'initDeviation': tuple([0.005] + [0] * 11), 'endTime': 6})
+    worker({'a2': 2.53, 'initDeviationSimOne': tuple([0.0001] + [0] * 11), 'initDeviationSimTwo': tuple([0] + [0.0001] + [0] * 10), 'endTime': 6})
 
