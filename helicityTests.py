@@ -61,8 +61,10 @@ def magnitude(vari):
     return np.sqrt(length_vari)
 
 
-def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, avar1 = [0, 0], avar2 = [0, 0]):
+def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, avar1 = (0, 0), avar2 = (0, 0)):
     global sim1, sim2, sim3, currentDeviation1, currentDeviation2, derivativeDeviation1, derivativeDeviation2, helicityAngles1, twistAngles1
+    currentDeviation1 = []
+    currentDeviation2 = []
     helicityAngles1 = [[0]]
     twistAngles1 = [[0]]
     pi = np.pi
@@ -86,7 +88,7 @@ def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, a
     sim2.add(primary=sim1.particles[0], a=a2 + avar2[1], m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
     sim2.move_to_com()
     for i in range(1, len(sim2.particles)):
-        currentDeviation1.append(getattr(sim2.particles[i], k) for k in altphaseSpaceParameters)
+        currentDeviation1.append([getattr(sim2.particles[i], k) for k in altphaseSpaceParameters])
     sim3 = rb.Simulation()
     sim3.units = ('Yr', 'AU', 'Msun')
     sim3.integrator = 'ias15'
@@ -96,7 +98,7 @@ def main(a2=2.53, a1=0.861, endTime=6, part=1, sep=1.1, dt=0.01, recVar=False, a
     sim3.add(primary=sim1.particles[0], a=a2, m=10.19/1047.56, e=0.274, omega=(240.8*pi)/180, inc=(13.5*pi)/180, M=82.5*pi/180, Omega=(115*pi)/180)
     sim3.move_to_com()
     for i in range(1, len(sim3.particles)):
-        currentDeviation2.append(getattr(sim2.particles[i], k) for k in altphaseSpaceParameters)
+        currentDeviation2.append([getattr(sim2.particles[i], k) for k in altphaseSpaceParameters])
     derivativeDeviation1 = [[0] * len(currentDeviation1)]
     derivativeDeviation2 = [[0] * len(currentDeviation2)]
     print("All systems go for dt: {} and a2: {}!".format(dt, a2))
@@ -134,5 +136,5 @@ def worker(arguments):
 
 
 if __name__ == "__main__":
-    worker({'a2': 2.53, 'avar1': tuple([0.0001] + [0] * 11), 'avar2': tuple([0] + [0.0001] + [0] * 10), 'endTime': 6})
+    worker({'a2': 2.53, 'avar1': tuple([0.1, 0]), 'avar2': tuple([0, 0.001]), 'endTime': 6})
 
